@@ -1,20 +1,17 @@
---[[ SimpAIM Console Paste Version ]]--
+--[[ SimpAIM Fixed Version ]]--
 
+-- Services
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
-local camera = workspace.CurrentCamera
+local camera = workspace:WaitForChild("CurrentCamera")
 
--- Prevent duplicate GUIs
-if PlayerGui:FindFirstChild("SimpAIM_UI") then
-    PlayerGui.SimpAIM_UI:Destroy()
-end
-if PlayerGui:FindFirstChild("SimpAIM_Splash") then
-    PlayerGui.SimpAIM_Splash:Destroy()
-end
+-- Prevent duplicate GUI
+if PlayerGui:FindFirstChild("SimpAIM_UI") then PlayerGui.SimpAIM_UI:Destroy() end
+if PlayerGui:FindFirstChild("SimpAIM_Splash") then PlayerGui.SimpAIM_Splash:Destroy() end
 
 -- Flags
 local systemActive = false
@@ -24,7 +21,7 @@ local glowActive = false
 local highlights = {}
 local guiVisible = true
 local freecamActive = false
-local freecamCFrame = nil
+local freecamOrigin = nil
 
 -- ===== Splash =====
 local splashGui = Instance.new("ScreenGui")
@@ -56,8 +53,8 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = PlayerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0,400,0,300)
-frame.Position = UDim2.new(0.5,-200,0.3,-150)
+frame.Size = UDim2.new(0,350,0,300)
+frame.Position = UDim2.new(0.5,-175,0.3,-150)
 frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
 frame.Active = true
 frame.Draggable = true
@@ -67,7 +64,7 @@ local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0,12)
 corner.Parent = frame
 
--- Minimize Button
+-- Minimize button
 local minimizeBtn = Instance.new("TextButton")
 minimizeBtn.Size = UDim2.new(0,30,0,30)
 minimizeBtn.Position = UDim2.new(1,-70,0,5)
@@ -82,75 +79,66 @@ minimizeBtn.MouseButton1Click:Connect(function()
     guiVisible = false
 end)
 
--- Terminate Button
-local terminateBtn = Instance.new("TextButton")
-terminateBtn.Size = UDim2.new(0,30,0,30)
-terminateBtn.Position = UDim2.new(1,-35,0,5)
-terminateBtn.Text = "X"
-terminateBtn.Font = Enum.Font.SourceSansBold
-terminateBtn.TextSize = 20
-terminateBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
-terminateBtn.TextColor3 = Color3.fromRGB(0,0,0)
-terminateBtn.Parent = frame
-terminateBtn.MouseButton1Click:Connect(function()
+-- Close button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0,30,0,30)
+closeBtn.Position = UDim2.new(1,-35,0,5)
+closeBtn.Text = "X"
+closeBtn.Font = Enum.Font.SourceSansBold
+closeBtn.TextSize = 20
+closeBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
+closeBtn.TextColor3 = Color3.fromRGB(0,0,0)
+closeBtn.Parent = frame
+closeBtn.MouseButton1Click:Connect(function()
     screenGui:Destroy()
-    -- Cleanup
+    -- Clean up highlights
+    for char,_ in pairs(highlights) do
+        if highlights[char] then highlights[char]:Destroy() end
+    end
     highlights = {}
+    -- Disconnect any events by stopping RenderStepped connections
     systemActive = false
     rightMouseDown = false
     lockedTarget = nil
-    freecamActive = false
 end)
 
--- Status label
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(0,380,0,60)
-statusLabel.Position = UDim2.new(0,10,0,40)
-statusLabel.BackgroundTransparency = 1
-statusLabel.TextColor3 = Color3.new(1,1,1)
-statusLabel.Font = Enum.Font.SourceSansBold
-statusLabel.TextSize = 16
-statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-statusLabel.TextYAlignment = Enum.TextYAlignment.Top
-statusLabel.Text = ""
-statusLabel.Parent = frame
-
--- Hotkeys frame
+-- Hotkeys frame (scrollable)
 local hotkeysFrame = Instance.new("ScrollingFrame")
-hotkeysFrame.Size = UDim2.new(0,380,0,150)
-hotkeysFrame.Position = UDim2.new(0,10,0,110)
-hotkeysFrame.BackgroundColor3 = Color3.fromRGB(50,50,50)
+hotkeysFrame.Size = UDim2.new(1,-20,0,150)
+hotkeysFrame.Position = UDim2.new(0,10,0,40)
 hotkeysFrame.CanvasSize = UDim2.new(0,0,0,0)
-hotkeysFrame.ScrollBarThickness = 8
+hotkeysFrame.BackgroundTransparency = 0.2
+hotkeysFrame.BackgroundColor3 = Color3.fromRGB(50,50,50)
+hotkeysFrame.BorderSizePixel = 0
 hotkeysFrame.Parent = frame
 
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Parent = hotkeysFrame
-UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0,5)
+local uiList = Instance.new("UIListLayout")
+uiList.Padding = UDim.new(0,5)
+uiList.Parent = hotkeysFrame
+uiList.SortOrder = Enum.SortOrder.LayoutOrder
 
-local function addHotkey(desc)
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1,0,0,30)
-    lbl.BackgroundTransparency = 1
-    lbl.TextColor3 = Color3.new(1,1,1)
-    lbl.Font = Enum.Font.SourceSansBold
-    lbl.TextScaled = true
-    lbl.Text = desc
-    lbl.Parent = hotkeysFrame
-    hotkeysFrame.CanvasSize = UDim2.new(0,0,0,UIListLayout.AbsoluteContentSize.Y)
+local function addHotkeyText(text)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,0,0,25)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1,1,1)
+    label.Text = text
+    label.Font = Enum.Font.SourceSansBold
+    label.TextScaled = true
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = hotkeysFrame
+    hotkeysFrame.CanvasSize = UDim2.new(0,0,0,uiList.AbsoluteContentSize.Y)
 end
 
--- Add hotkeys
-addHotkey("Q - Toggle Camera Lock")
-addHotkey("Shift+Q - Toggle Glow")
-addHotkey("M - Toggle GUI")
-addHotkey("N - Show Hotkeys")
-addHotkey("J - Toggle Freecam")
-addHotkey("Right Mouse - Lock Target")
+-- Add default hotkeys
+addHotkeyText("Q - Toggle Camera Lock")
+addHotkeyText("M - Toggle GUI visibility")
+addHotkeyText("J - Toggle Freecam")
+addHotkeyText("Shift+Q - Toggle Glow")
 
 -- ===== Glow Functions =====
 local function createHighlight(character)
+    if not character then return end
     if highlights[character] then highlights[character]:Destroy() end
     local highlight = Instance.new("Highlight")
     highlight.FillColor = Color3.fromRGB(255,0,0)
@@ -179,7 +167,9 @@ local function enableGlow()
 end
 
 local function disableGlow()
-    for char,_ in pairs(highlights) do removeHighlight(char) end
+    for char,_ in pairs(highlights) do
+        removeHighlight(char)
+    end
 end
 
 local function toggleGlow()
@@ -197,44 +187,44 @@ local function getNearestPlayer()
             local headPos,onScreen = camera:WorldToViewportPoint(p.Character.Head.Position)
             if onScreen then
                 local dist = (mousePos - Vector2.new(headPos.X,headPos.Y)).Magnitude
-                if dist<shortest then
-                    shortest = dist
-                    closest = p
-                end
+                if dist<shortest then shortest=dist closest=p end
             end
         end
     end
     return closest
 end
 
+-- ===== Freecam =====
+local function toggleFreecam()
+    if not freecamActive then
+        freecamOrigin = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.CFrame or nil
+        freecamActive = true
+    else
+        if freecamOrigin and player.Character and player.Character.PrimaryPart then
+            player.Character:SetPrimaryPartCFrame(freecamOrigin)
+        end
+        freecamActive = false
+    end
+end
+
 -- ===== Input Handling =====
 UserInputService.InputBegan:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.Q then
+    if input.KeyCode == Enum.KeyCode.Q and not UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
         systemActive = not systemActive
         if not systemActive then rightMouseDown=false lockedTarget=nil end
     end
-    if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
-        if UserInputService:IsKeyDown(Enum.KeyCode.Q) then
-            toggleGlow()
-        end
+    if input.KeyCode == Enum.KeyCode.Q and (UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)) then
+        toggleGlow()
     end
     if input.KeyCode == Enum.KeyCode.M then
         guiVisible = not guiVisible
         frame.Visible = guiVisible
     end
-    if input.KeyCode == Enum.KeyCode.N then
-        hotkeysFrame.Visible = not hotkeysFrame.Visible
-    end
     if input.KeyCode == Enum.KeyCode.J then
-        freecamActive = not freecamActive
-        if freecamActive then
-            freecamCFrame = camera.CFrame
-        else
-            if freecamCFrame then camera.CFrame = freecamCFrame end
-        end
+        toggleFreecam()
     end
-    if systemActive and input.UserInputType == Enum.UserInputType.MouseButton2 then
-        rightMouseDown = true
+    if systemActive and input.UserInputType==Enum.UserInputType.MouseButton2 then
+        rightMouseDown=true
         lockedTarget = getNearestPlayer()
     end
 end)
@@ -246,21 +236,22 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- ===== Camera Glide Loop =====
-local glideSpeed = 0.1
+-- ===== Camera Lock Loop =====
 RunService.RenderStepped:Connect(function(dt)
     if systemActive and rightMouseDown and lockedTarget and lockedTarget.Character and lockedTarget.Character:FindFirstChild("Head") then
         local targetPos = lockedTarget.Character.Head.Position
         local camPos = camera.CFrame.Position
-        local newPos = camPos:Lerp(targetPos, glideSpeed)
-        camera.CFrame = CFrame.lookAt(newPos, targetPos)
-        player.Character:SetPrimaryPartCFrame(CFrame.new(newPos))
+        local newCFrame = CFrame.lookAt(camPos, targetPos)
+        camera.CFrame = newCFrame
+
+        -- Rotate player body toward target safely
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
+            local lookVector = (targetPos - hrp.Position)
+            if lookVector.Magnitude>0 then
+                local newHRP = CFrame.new(hrp.Position, hrp.Position + Vector3.new(lookVector.X,0,lookVector.Z))
+                hrp.CFrame = newHRP
+            end
+        end
     end
-    statusLabel.Text = string.format(
-        "Camera Lock: %s | %s\nGlow: %s | Freecam: %s",
-        systemActive and "Active" or "Inactive",
-        (systemActive and rightMouseDown and lockedTarget) and "RUNNING" or "Idle",
-        glowActive and "ON" or "OFF",
-        freecamActive and "ON" or "OFF"
-    )
 end)
