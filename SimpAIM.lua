@@ -1,6 +1,4 @@
---[[ SimpAIM Fixed Version ]]--
-
--- Services
+--[[ SimpAIM Xeno Version ]]--
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -21,7 +19,7 @@ local glowActive = false
 local highlights = {}
 local guiVisible = true
 local freecamActive = false
-local freecamOrigin = nil
+local freecamPos = nil
 
 -- ===== Splash =====
 local splashGui = Instance.new("ScreenGui")
@@ -53,8 +51,8 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = PlayerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0,350,0,300)
-frame.Position = UDim2.new(0.5,-175,0.3,-150)
+frame.Size = UDim2.new(0,300,0,400)
+frame.Position = UDim2.new(0.5,-150,0.3,-200)
 frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
 frame.Active = true
 frame.Draggable = true
@@ -79,7 +77,7 @@ minimizeBtn.MouseButton1Click:Connect(function()
     guiVisible = false
 end)
 
--- Close button
+-- Close button (X)
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size = UDim2.new(0,30,0,30)
 closeBtn.Position = UDim2.new(1,-35,0,5)
@@ -91,54 +89,46 @@ closeBtn.TextColor3 = Color3.fromRGB(0,0,0)
 closeBtn.Parent = frame
 closeBtn.MouseButton1Click:Connect(function()
     screenGui:Destroy()
-    -- Clean up highlights
-    for char,_ in pairs(highlights) do
-        if highlights[char] then highlights[char]:Destroy() end
-    end
+    for _,v in pairs(highlights) do if v then v:Destroy() end end
     highlights = {}
-    -- Disconnect any events by stopping RenderStepped connections
-    systemActive = false
-    rightMouseDown = false
-    lockedTarget = nil
+    RunService:UnbindFromRenderStep("CameraLock")
 end)
 
--- Hotkeys frame (scrollable)
+-- Hotkeys Label (scrollable)
 local hotkeysFrame = Instance.new("ScrollingFrame")
-hotkeysFrame.Size = UDim2.new(1,-20,0,150)
-hotkeysFrame.Position = UDim2.new(0,10,0,40)
+hotkeysFrame.Size = UDim2.new(1,-20,0,300)
+hotkeysFrame.Position = UDim2.new(0,10,0,50)
+hotkeysFrame.BackgroundTransparency = 0.3
 hotkeysFrame.CanvasSize = UDim2.new(0,0,0,0)
-hotkeysFrame.BackgroundTransparency = 0.2
-hotkeysFrame.BackgroundColor3 = Color3.fromRGB(50,50,50)
-hotkeysFrame.BorderSizePixel = 0
+hotkeysFrame.ScrollBarThickness = 6
 hotkeysFrame.Parent = frame
 
-local uiList = Instance.new("UIListLayout")
-uiList.Padding = UDim.new(0,5)
-uiList.Parent = hotkeysFrame
-uiList.SortOrder = Enum.SortOrder.LayoutOrder
+local hotkeysList = {}
 
-local function addHotkeyText(text)
+local function addHotkey(text)
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1,0,0,25)
+    label.Size = UDim2.new(1,-10,0,25)
+    label.Position = UDim2.new(0,0,0,#hotkeysList*25)
     label.BackgroundTransparency = 1
     label.TextColor3 = Color3.new(1,1,1)
-    label.Text = text
-    label.Font = Enum.Font.SourceSansBold
+    label.Font = Enum.Font.SourceSans
     label.TextScaled = true
+    label.Text = text
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = hotkeysFrame
-    hotkeysFrame.CanvasSize = UDim2.new(0,0,0,uiList.AbsoluteContentSize.Y)
+    table.insert(hotkeysList,label)
+    hotkeysFrame.CanvasSize = UDim2.new(0,0,0,#hotkeysList*25)
 end
 
 -- Add default hotkeys
-addHotkeyText("Q - Toggle Camera Lock")
-addHotkeyText("M - Toggle GUI visibility")
-addHotkeyText("J - Toggle Freecam")
-addHotkeyText("Shift+Q - Toggle Glow")
+addHotkey("Q: Toggle Camera Lock")
+addHotkey("M: Toggle GUI")
+addHotkey("N: Show Hotkeys")
+addHotkey("J: Freecam Toggle")
+addHotkey("Shift+Q: Toggle Glow")
 
--- ===== Glow Functions =====
+-- ===== Glow =====
 local function createHighlight(character)
-    if not character then return end
     if highlights[character] then highlights[character]:Destroy() end
     local highlight = Instance.new("Highlight")
     highlight.FillColor = Color3.fromRGB(255,0,0)
@@ -151,10 +141,7 @@ local function createHighlight(character)
 end
 
 local function removeHighlight(character)
-    if highlights[character] then
-        highlights[character]:Destroy()
-        highlights[character]=nil
-    end
+    if highlights[character] then highlights[character]:Destroy() highlights[character]=nil end
 end
 
 local function enableGlow()
@@ -167,9 +154,7 @@ local function enableGlow()
 end
 
 local function disableGlow()
-    for char,_ in pairs(highlights) do
-        removeHighlight(char)
-    end
+    for char,_ in pairs(highlights) do removeHighlight(char) end
 end
 
 local function toggleGlow()
@@ -194,35 +179,36 @@ local function getNearestPlayer()
     return closest
 end
 
--- ===== Freecam =====
-local function toggleFreecam()
-    if not freecamActive then
-        freecamOrigin = player.Character and player.Character.PrimaryPart and player.Character.PrimaryPart.CFrame or nil
-        freecamActive = true
-    else
-        if freecamOrigin and player.Character and player.Character.PrimaryPart then
-            player.Character:SetPrimaryPartCFrame(freecamOrigin)
-        end
-        freecamActive = false
-    end
-end
-
 -- ===== Input Handling =====
 UserInputService.InputBegan:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.Q and not UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
         systemActive = not systemActive
         if not systemActive then rightMouseDown=false lockedTarget=nil end
     end
+
     if input.KeyCode == Enum.KeyCode.Q and (UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)) then
         toggleGlow()
     end
+
     if input.KeyCode == Enum.KeyCode.M then
         guiVisible = not guiVisible
         frame.Visible = guiVisible
     end
-    if input.KeyCode == Enum.KeyCode.J then
-        toggleFreecam()
+
+    if input.KeyCode == Enum.KeyCode.N then
+        hotkeysFrame.Visible = not hotkeysFrame.Visible
     end
+
+    if input.KeyCode == Enum.KeyCode.J then
+        if not freecamActive then
+            freecamActive = true
+            freecamPos = camera.CFrame
+        else
+            freecamActive = false
+            if freecamPos then camera.CFrame = freecamPos end
+        end
+    end
+
     if systemActive and input.UserInputType==Enum.UserInputType.MouseButton2 then
         rightMouseDown=true
         lockedTarget = getNearestPlayer()
@@ -236,22 +222,10 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- ===== Camera Lock Loop =====
-RunService.RenderStepped:Connect(function(dt)
+-- ===== Camera Lock =====
+RunService:BindToRenderStep("CameraLock", Enum.RenderPriority.Camera.Value, function()
     if systemActive and rightMouseDown and lockedTarget and lockedTarget.Character and lockedTarget.Character:FindFirstChild("Head") then
         local targetPos = lockedTarget.Character.Head.Position
-        local camPos = camera.CFrame.Position
-        local newCFrame = CFrame.lookAt(camPos, targetPos)
-        camera.CFrame = newCFrame
-
-        -- Rotate player body toward target safely
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local hrp = player.Character.HumanoidRootPart
-            local lookVector = (targetPos - hrp.Position)
-            if lookVector.Magnitude>0 then
-                local newHRP = CFrame.new(hrp.Position, hrp.Position + Vector3.new(lookVector.X,0,lookVector.Z))
-                hrp.CFrame = newHRP
-            end
-        end
+        camera.CFrame = CFrame.new(targetPos) -- Snap to head
     end
 end)
